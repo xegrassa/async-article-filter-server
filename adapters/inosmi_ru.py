@@ -8,7 +8,8 @@ from .html_tools import remove_buzz_attrs, remove_buzz_tags, remove_all_tags
 
 def sanitize(html, plaintext=False):
     soup = BeautifulSoup(html, 'html.parser')
-    articles = soup.select("article.article")
+    # articles = soup.select("article.article")
+    articles = soup.select("div.layout-article")
 
     if len(articles) != 1:
         raise ArticleNotFound()
@@ -40,8 +41,8 @@ def test_sanitize():
     resp.raise_for_status()
     clean_text = sanitize(resp.text)
 
-    assert clean_text.startswith('<article>')
-    assert clean_text.endswith('</article>')
+    # assert clean_text.startswith('<article>')
+    # assert clean_text.endswith('</article>')
     assert 'В субботу, 29 июня, президент США Дональд Трамп' in clean_text
     assert 'За несколько часов до встречи с Си' in clean_text
 
