@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import platform
 import time
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -11,12 +10,12 @@ from urllib.parse import urlparse
 import aiohttp
 import pymorphy2
 from aiohttp.client_exceptions import ClientResponseError
-from anyio import create_task_group, run
+from anyio import create_task_group
 from async_timeout import timeout
 
-from adapters import SANITIZERS
-from adapters.exceptions import ArticleNotFound
-from text_tools import calculate_jaundice_rate, split_by_words
+from core.adapters import SANITIZERS, ArticleNotFound
+
+from .text_tools import calculate_jaundice_rate, split_by_words
 
 logger = logging.getLogger(__name__)
 
@@ -29,26 +28,19 @@ class ProcessingStatus(Enum):
 
 
 @dataclass
-class Record:
+class Report:
     url: str
     status: ProcessingStatus = ProcessingStatus.FETCH_ERROR
     score: Optional[float] = None
     words_count: Optional[int] = None
 
 
-TEST_ARTICLES = [
-    'https://inosmi.ru/z20220204/zelenskiy-252866566.html',
-    'https://lenta.ru/news/2022/02/06/esxort/',
-    'https://inosmi.ru/20220204/armiya-252869308.html',
-    'https://inosmi.ru/20220204/erdogan-252870813.html',
-    'https://inosmi.ru/20220204/diplomatiya-252863841.html',
-]
-# CHARGED_DICT = Path().cwd() / 'charged_dict' / 'negative_words.txt'
-CHARGED_DICT = 'charged_dict/negative_words.txt'
+CHARGED_DICT = '../core/charged_dict/negative_words.txt'
 
 
 @contextmanager
 def logging_analyze_time():
+    """Считает и логирует время затраченное на анализ статьи."""
     t_start = time.monotonic()
     yield
     t_stop = time.monotonic()
@@ -81,25 +73,25 @@ def get_sanitize(url: str) -> Callable:
     raise ArticleNotFound
 
 
-async def process_article(session, morph, charged_words, url, records, title=None):
+async def process_article(session, morph, charged_words, url: str, records: list):
     """Функция process_article скачивает и анализирует текст статьи, после чего сразу выводит результаты на экран."""
     try:
         async with timeout(2):
             try:
                 html = await fetch(session, url)
             except ClientResponseError:
-                record = Record(url=url, status=ProcessingStatus.FETCH_ERROR)
+                record = Report(url=url, status=ProcessingStatus.FETCH_ERROR)
                 records.append(record)
                 return
     except asyncio.TimeoutError:
-        record = Record(url=url, status=ProcessingStatus.TIMEOUT)
+        record = Report(url=url, status=ProcessingStatus.TIMEOUT)
         records.append(record)
         return
 
     try:
         sanitize = get_sanitize(url)
     except ArticleNotFound:
-        record = Record(url=url, status=ProcessingStatus.PARSING_ERROR)
+        record = Report(url=url, status=ProcessingStatus.PARSING_ERROR)
         records.append(record)
         return
 
@@ -110,15 +102,13 @@ async def process_article(session, morph, charged_words, url, records, title=Non
             async with timeout(3):
                 article_words = await split_by_words(morph, text)
         except asyncio.TimeoutError:
-            record = Record(url=url, status=ProcessingStatus.TIMEOUT)
+            record = Report(url=url, status=ProcessingStatus.TIMEOUT)
             records.append(record)
             return
 
         score = calculate_jaundice_rate(article_words, charged_words)
 
-    words_count = len(article_words)
-
-    record = Record(url=url, status=ProcessingStatus.OK, score=score, words_count=words_count)
+    record = Report(url=url, status=ProcessingStatus.OK, score=score, words_count=len(article_words))
     records.append(record)
 
 
@@ -128,34 +118,12 @@ async def fetch(session, url):
         return await response.text()
 
 
-def _configure_loggers():
-    ch = logging.StreamHandler()
-    ch.setLevel(logging.INFO)
-    formatter = logging.Formatter(f'%(levelname)s:%(module)s:%(message)s')
-    ch.setFormatter(formatter)
-
-    logger = logging.getLogger(__name__)
-    logger.setLevel(logging.INFO)
-    logger.addHandler(ch)
-
-
-async def main():
+async def main(urls: list[str]) -> list[Report]:
     records = []
     morph = pymorphy2.MorphAnalyzer()
     charged_words = get_charged_words(CHARGED_DICT)
     async with aiohttp.ClientSession() as session:
         async with create_task_group() as tg:
-            for url in TEST_ARTICLES:
+            for url in urls:
                 tg.start_soon(process_article, session, morph, charged_words, url, records)
-    for record in records:
-        print('URL:', record.url)
-        print('Статус:', record.status.value)
-        print('Рейтинг:', record.score)
-        print('Слов в статье:', record.words_count)
-
-
-if __name__ == '__main__':
-    _configure_loggers()
-    if platform.system() == 'Windows':
-        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-    run(main)
+    return records
