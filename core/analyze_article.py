@@ -35,7 +35,7 @@ class Report:
     words_count: Optional[int] = None
 
 
-CHARGED_DICT = '../core/charged_dict/negative_words.txt'
+CHARGED_DICT = '../charged_dict/negative_words.txt'
 
 
 @contextmanager
@@ -46,6 +46,23 @@ def logging_analyze_time():
     t_stop = time.monotonic()
     t_run = t_stop - t_start
     logger.info(f'Анализ закончен за {t_run:.2} сек')
+
+
+async def analyze_urls(urls: list[str]) -> list[Report]:
+    """
+    Главная корутина анализа на желтушность статей.
+
+    :param urls: Адреса для анализа
+    :return: Отчет по каждому адресу
+    """
+    records = []
+    morph = pymorphy2.MorphAnalyzer()
+    charged_words = get_charged_words(CHARGED_DICT)
+    async with aiohttp.ClientSession() as session:
+        async with create_task_group() as tg:
+            for url in urls:
+                tg.start_soon(process_article, session, morph, charged_words, url, records)
+    return records
 
 
 def get_charged_words(path: str) -> list[str]:
@@ -73,28 +90,32 @@ def get_sanitize(url: str) -> Callable:
     raise ArticleNotFound
 
 
-async def process_article(session, morph, charged_words, url: str, records: list):
-    """Функция process_article скачивает и анализирует текст статьи, после чего сразу выводит результаты на экран."""
+async def process_article(session, morph, charged_words, url: str, records: list) -> Report:
+    """Функция process_article скачивает и анализирует текст статьи."""
+
+    # Скачивание html с таймаутом в 2 сек
     try:
         async with timeout(2):
             try:
                 html = await fetch(session, url)
             except ClientResponseError:
-                record = Report(url=url, status=ProcessingStatus.FETCH_ERROR)
-                records.append(record)
-                return
+                report = Report(url=url, status=ProcessingStatus.FETCH_ERROR)
+                records.append(report)
+                return report
     except asyncio.TimeoutError:
-        record = Report(url=url, status=ProcessingStatus.TIMEOUT)
-        records.append(record)
-        return
+        report = Report(url=url, status=ProcessingStatus.TIMEOUT)
+        records.append(report)
+        return report
 
+    # Берется обработчик для статей скачанного сайта
     try:
         sanitize = get_sanitize(url)
     except ArticleNotFound:
-        record = Report(url=url, status=ProcessingStatus.PARSING_ERROR)
-        records.append(record)
-        return
+        report = Report(url=url, status=ProcessingStatus.PARSING_ERROR)
+        records.append(report)
+        return report
 
+    # Анализируется статья с таймаутом в 3 сек
     with logging_analyze_time():
         text = sanitize(html, plaintext=True)
 
@@ -102,28 +123,19 @@ async def process_article(session, morph, charged_words, url: str, records: list
             async with timeout(3):
                 article_words = await split_by_words(morph, text)
         except asyncio.TimeoutError:
-            record = Report(url=url, status=ProcessingStatus.TIMEOUT)
-            records.append(record)
-            return
+            report = Report(url=url, status=ProcessingStatus.TIMEOUT)
+            records.append(report)
+            return report
 
         score = calculate_jaundice_rate(article_words, charged_words)
 
-    record = Report(url=url, status=ProcessingStatus.OK, score=score, words_count=len(article_words))
-    records.append(record)
+    # Если нигде не было ошибок отчет об анализе добавляется в общий список отчетов
+    report = Report(url=url, status=ProcessingStatus.OK, score=score, words_count=len(article_words))
+    records.append(report)
+    return report
 
 
 async def fetch(session, url):
     async with session.get(url) as response:
         response.raise_for_status()
         return await response.text()
-
-
-async def main(urls: list[str]) -> list[Report]:
-    records = []
-    morph = pymorphy2.MorphAnalyzer()
-    charged_words = get_charged_words(CHARGED_DICT)
-    async with aiohttp.ClientSession() as session:
-        async with create_task_group() as tg:
-            for url in urls:
-                tg.start_soon(process_article, session, morph, charged_words, url, records)
-    return records

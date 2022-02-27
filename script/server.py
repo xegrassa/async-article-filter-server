@@ -1,7 +1,12 @@
-from aiohttp import web
-from aiohttp.web import Request
 import logging
-from core.main import main
+import os
+import sys
+
+from aiohttp import web
+
+sys.path.append(os.getcwd())
+
+from core.analyze_article import analyze_urls
 
 
 def _configure_loggers():
@@ -15,7 +20,7 @@ def _configure_loggers():
     logger.addHandler(ch)
 
 
-async def handle(request: Request):
+async def handle(request: web.Request):
     if request.query.get('urls') is None:
         return web.Response(text='Query string пустой. Добавте ?urls=url_сайта')
 
@@ -24,7 +29,7 @@ async def handle(request: Request):
         data = {"error": "too many urls in request, should be 10 or less"}
         return web.json_response(data=data, status=web.HTTPBadRequest.status_code)
 
-    records = await main(urls)
+    records = await analyze_urls(urls)
     responses = [{'status': record.status.name,
                   'url': record.url,
                   'score': record.score,
