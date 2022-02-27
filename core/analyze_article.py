@@ -35,7 +35,7 @@ class Report:
     words_count: Optional[int] = None
 
 
-CHARGED_DICT = '../charged_dict/negative_words.txt'
+CHARGED_DICT = 'charged_dict/negative_words.txt'
 
 
 @contextmanager
