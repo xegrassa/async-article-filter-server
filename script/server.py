@@ -26,7 +26,7 @@ async def handle(request: web.Request):
 
     urls = request.query.get('urls').split(',')
     if len(urls) > 10:
-        data = {"error": "too many urls in request, should be 10 or less"}
+        data = {'error': 'too many urls in request, should be 10 or less'}
         return web.json_response(data=data, status=web.HTTPBadRequest.status_code)
 
     records = await analyze_urls(urls)
@@ -37,11 +37,14 @@ async def handle(request: web.Request):
     return web.json_response(responses)
 
 
-app = web.Application()
-app.add_routes([
-    web.get('/', handle),
-])
+def main():
+    app = web.Application()
+    app.add_routes([
+        web.get('/', handle),
+    ])
+    web.run_app(app, host='127.0.0.1', port=80)
+
 
 if __name__ == '__main__':
     _configure_loggers()
-    web.run_app(app, host='127.0.0.1', port=80)
+    main()
