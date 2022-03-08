@@ -49,8 +49,7 @@ def logging_analyze_time():
 
 
 async def analyze_urls(urls: list[str]) -> list[Report]:
-    """
-    Главная корутина анализа на желтушность статей.
+    """Главная корутина анализа на желтушность статей.
 
     :param urls: Адреса для анализа
     :return: Отчет по каждому адресу
@@ -66,8 +65,7 @@ async def analyze_urls(urls: list[str]) -> list[Report]:
 
 
 def get_charged_words(path: str) -> list[str]:
-    """
-    Возвращает заряженные слова по которым считается рейтинг желтушности.
+    """Возвращает заряженные слова по которым считается рейтинг желтушности.
 
     :param path: Путь до файла с заряженными словами
     """
@@ -78,8 +76,7 @@ def get_charged_words(path: str) -> list[str]:
 
 
 def get_sanitize(url: str) -> Callable:
-    """
-    Из url берет название сайта для которого возвращает нужный парсер HTML разметки.
+    """Из url берет название сайта для которого возвращает нужный парсер HTML разметки.
 
     :param url: URL до сайта который надо парсить
     """

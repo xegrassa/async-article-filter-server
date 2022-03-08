@@ -6,8 +6,7 @@ from .html_tools import remove_all_tags, remove_buzz_attrs, remove_buzz_tags
 
 def sanitize(html, plaintext=False):
     soup = BeautifulSoup(html, 'html.parser')
-    # articles = soup.select("article.article")
-    articles = soup.select("div.layout-article")
+    articles = soup.select('div.layout-article')
 
     if len(articles) != 1:
         raise ArticleNotFound()
