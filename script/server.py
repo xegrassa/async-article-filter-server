@@ -42,7 +42,7 @@ def main():
     app.add_routes([
         web.get('/', handle),
     ])
-    web.run_app(app, host='127.0.0.1', port=80)
+    web.run_app(app, host='0.0.0.0', port=8001)
 
 
 if __name__ == '__main__':
